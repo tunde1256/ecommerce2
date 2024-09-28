@@ -248,60 +248,63 @@
         }
     
         async function startLiveStream() {
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                video.srcObject = localStream;
-                addTracksToPeerConnection(localStream);
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        video.srcObject = localStream;
+        addTracksToPeerConnection(localStream);
 
-                // Generate the stream link using your deployment URL
-                const streamId = new Date().getTime();
-                const streamLink = `https://chat-and-live-stream.onrender.com/join-stream.html?streamId=${streamId}&token=${token}`;
-                
-                // Save the link in localStorage
-                localStorage.setItem('streamLink', streamLink);
+        // Generate the stream link using your deployment URL
+        const streamId = new Date().getTime();
+        const streamLink = `https://chat-and-live-stream.onrender.com/join-stream.html?streamId=${streamId}&token=${token}`;
+        
+        // Save the link in localStorage
+        localStorage.setItem('streamLink', streamLink);
 
-                // Display the link in the UI
-                document.getElementById('streamLink').innerHTML = `Your stream link: <a href="${streamLink}" target="_blank">${streamLink}</a>`;
-                
-                // Start signaling
-                signalingSocket.send(JSON.stringify({ offer: await peerConnection.createOffer() }));
-            } catch (error) {
-                console.error('Error starting live stream:', error);
-            }
-        }
+        // Display the link in the UI
+        document.getElementById('streamLink').innerHTML = `Share this link to join the stream: <a href="${streamLink}" target="_blank">${streamLink}</a>`;
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        signalingSocket.send(JSON.stringify({ offer }));
+
+        setupWebSockets();
+    } catch (error) {
+        console.error('Error starting live stream:', error);
+    }
+}
+
     
         function addTracksToPeerConnection(stream) {
             stream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, stream);
             });
         }
+    
+        function endLiveStream() {
+            localStream.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+            signalingSocket.close();
+        }
 
         function sendMessage() {
             const messageInput = document.getElementById('messageInput');
-            const message = messageInput.value.trim();
+            const message = messageInput.value;
             if (message) {
                 socket.send(message);
-                messageInput.value = '';
+                messageInput.value = ''; // Clear the input
             }
         }
-    
-        async function endLiveStream() {
-            // Stop all media tracks
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-            signalingSocket.close();
-            socket.close();
-        }
-    
+
         function startScreenShare() {
-            navigator.mediaDevices.getDisplayMedia({ video: true }).then(stream => {
-                screenStream = stream;
-                addTracksToPeerConnection(screenStream);
-                screenStream.getTracks()[0].onended = stopScreenShare; // Stop sharing when the user ends it
-            });
+            navigator.mediaDevices.getDisplayMedia({ video: true })
+                .then(stream => {
+                    screenStream = stream;
+                    addTracksToPeerConnection(screenStream);
+                    stream.getTracks()[0].onended = stopScreenShare; // Stop screen share when ended
+                })
+                .catch(error => console.error('Error sharing screen:', error));
         }
-    
+
         function stopScreenShare() {
             if (screenStream) {
                 screenStream.getTracks().forEach(track => track.stop());
@@ -311,17 +314,21 @@
 
         function toggleVideo() {
             videoEnabled = !videoEnabled;
-            localStream.getVideoTracks()[0].enabled = videoEnabled;
+            localStream.getVideoTracks().forEach(track => track.enabled = videoEnabled);
         }
 
         function copyStreamLink() {
-            const link = document.getElementById('streamLink').innerText;
-            navigator.clipboard.writeText(link).then(() => {
+            const streamLink = localStorage.getItem('streamLink');
+            navigator.clipboard.writeText(streamLink).then(() => {
                 alert('Stream link copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy stream link: ', err);
             });
         }
 
-        setupWebSockets();
+        // Initialize the WebSockets when the page loads
+        window.onload = setupWebSockets;
     </script>
+
 </body>
 </html>
