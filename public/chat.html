@@ -207,7 +207,6 @@
         function setupWebSockets() {
             socket = new WebSocket(`wss://chat-and-live-stream.onrender.com?token=${token}`);
             signalingSocket = new WebSocket('wss://chat-and-live-stream.onrender.com:9090');
-            peerConnection = new RTCPeerConnection();
     
             socket.onmessage = (event) => {
                 const message = event.data;
@@ -218,16 +217,7 @@
     
             signalingSocket.onmessage = async (event) => {
                 const data = JSON.parse(event.data);
-                if (data.offer) {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    signalingSocket.send(JSON.stringify({ answer }));
-                } else if (data.answer) {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                } else if (data.iceCandidate) {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.iceCandidate));
-                }
+                await handleSignalingData(data);
             };
     
             peerConnection.onicecandidate = (event) => {
@@ -247,32 +237,44 @@
             }
         }
     
+        async function handleSignalingData(data) {
+            if (data.offer) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                signalingSocket.send(JSON.stringify({ answer }));
+            } else if (data.answer) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } else if (data.iceCandidate) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.iceCandidate));
+            }
+        }
+    
         async function startLiveStream() {
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        video.srcObject = localStream;
-        addTracksToPeerConnection(localStream);
-
-        // Generate the stream link using your deployment URL
-        const streamId = new Date().getTime();
-        const streamLink = `https://chat-and-live-stream.onrender.com/join-stream.html?streamId=${streamId}&token=${token}`;
-        
-        // Save the link in localStorage
-        localStorage.setItem('streamLink', streamLink);
-
-        // Display the link in the UI
-        document.getElementById('streamLink').innerHTML = `Share this link to join the stream: <a href="${streamLink}" target="_blank">${streamLink}</a>`;
-
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        signalingSocket.send(JSON.stringify({ offer }));
-
-        setupWebSockets();
-    } catch (error) {
-        console.error('Error starting live stream:', error);
-    }
-}
-
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                video.srcObject = localStream;
+                addTracksToPeerConnection(localStream);
+    
+                // Generate the stream link using your deployment URL
+                const streamId = new Date().getTime();
+                const streamLink = `https://chat-and-live-stream.onrender.com/join-stream.html?streamId=${streamId}&token=${token}`;
+    
+                // Save the link in localStorage
+                localStorage.setItem('streamLink', streamLink);
+    
+                // Display the link in the UI
+                document.getElementById('streamLink').innerHTML = `Share this link to join the stream: <a href="${streamLink}" target="_blank">${streamLink}</a>`;
+    
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                signalingSocket.send(JSON.stringify({ offer }));
+    
+                setupWebSockets(); // Initialize WebSockets after starting the stream
+            } catch (error) {
+                console.error('Error starting live stream:', error);
+            }
+        }
     
         function addTracksToPeerConnection(stream) {
             stream.getTracks().forEach(track => {
@@ -281,20 +283,23 @@
         }
     
         function endLiveStream() {
-            localStream.getTracks().forEach(track => track.stop());
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
             video.srcObject = null;
             signalingSocket.close();
+            socket.close(); // Close the messaging socket as well
         }
-
+    
         function sendMessage() {
             const messageInput = document.getElementById('messageInput');
-            const message = messageInput.value;
+            const message = messageInput.value.trim(); // Trim whitespace
             if (message) {
                 socket.send(message);
                 messageInput.value = ''; // Clear the input
             }
         }
-
+    
         function startScreenShare() {
             navigator.mediaDevices.getDisplayMedia({ video: true })
                 .then(stream => {
@@ -304,31 +309,37 @@
                 })
                 .catch(error => console.error('Error sharing screen:', error));
         }
-
+    
         function stopScreenShare() {
             if (screenStream) {
                 screenStream.getTracks().forEach(track => track.stop());
                 screenStream = null;
             }
         }
-
+    
         function toggleVideo() {
             videoEnabled = !videoEnabled;
-            localStream.getVideoTracks().forEach(track => track.enabled = videoEnabled);
+            if (localStream) {
+                localStream.getVideoTracks().forEach(track => track.enabled = videoEnabled);
+            }
         }
-
+    
         function copyStreamLink() {
             const streamLink = localStorage.getItem('streamLink');
-            navigator.clipboard.writeText(streamLink).then(() => {
-                alert('Stream link copied to clipboard!');
-            }).catch(err => {
-                console.error('Failed to copy stream link: ', err);
-            });
+            if (streamLink) {
+                navigator.clipboard.writeText(streamLink).then(() => {
+                    alert('Stream link copied to clipboard!');
+                }).catch(err => {
+                    console.error('Failed to copy stream link: ', err);
+                });
+            } else {
+                alert('No stream link available to copy.');
+            }
         }
-
+    
         // Initialize the WebSockets when the page loads
         window.onload = setupWebSockets;
     </script>
-
+    
 </body>
 </html>
