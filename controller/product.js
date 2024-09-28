@@ -1,13 +1,13 @@
 const Product = require('../model/productmodel');
-const cloudinary = require('cloudinary').v2;
+const cloudinary = require('../middleware/cloudinary').v2;
 require('dotenv').config(); // Ensure this is called to load environment variables
 
 // Cloudinary configuration
-cloudinary.config({
-    cloud_name: process.env.cloud_name,
-    api_key: process.env.api_key,
-    api_secret: process.env.api_secret,
-});
+// cloudinary.config({
+//     cloud_name: process.env.cloud_name,
+//     api_key: process.env.api_key,
+//     api_secret: process.env.api_secret,
+// });
 
 // Create a new product
 exports.createProduct = async (req, res) => {
