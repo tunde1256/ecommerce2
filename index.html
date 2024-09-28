@@ -23,7 +23,11 @@
             window.location.href = '/login';
         }
 
-        const socket = new WebSocket(`ws://localhost:8080?token=${token}`);
+        // Determine the WebSocket protocol based on the current page protocol
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+
+        // Create WebSocket connection based on the deployment URL
+        const socket = new WebSocket(`${protocol}://chat-and-live-stream.onrender.com?token=${token}`);
 
         socket.onopen = () => {
             console.log('Connected to server');
@@ -49,7 +53,9 @@
 
         function sendMessage() {
             const message = document.getElementById('messageInput').value;
-            socket.send(message);
+            if (message.trim() !== '') {
+                socket.send(message);
+            }
         }
     </script>
 </body>

@@ -205,9 +205,8 @@
         const token = localStorage.getItem('token');
     
         function setupWebSockets() {
-            socket = new WebSocket(`ws://chat-and-live-stream.onrender.com?token=${token}`);
-            // signalingSocket = new WebSocket('ws://localhost:9090');
-           signalingSocket = new WebSocket('ws://chat-and-live-stream.onrender.com:9090');
+            socket = new WebSocket(`wss://chat-and-live-stream.onrender.com?token=${token}`);
+            signalingSocket = new WebSocket('wss://chat-and-live-stream.onrender.com:9090');
             peerConnection = new RTCPeerConnection();
     
             socket.onmessage = (event) => {
@@ -267,79 +266,68 @@
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 signalingSocket.send(JSON.stringify({ offer }));
+
+                setupWebSockets();
             } catch (error) {
                 console.error('Error starting live stream:', error);
             }
         }
     
-        async function endLiveStream() {
-            try {
-                localStream.getTracks().forEach(track => track.stop());
-                video.srcObject = null;
-                localStream = null;
-                peerConnection.close();
-                peerConnection = new RTCPeerConnection();
-                signalingSocket.send(JSON.stringify({ endStream: true }));
-                document.getElementById('streamLink').innerHTML = 'Live stream ended.';
-                localStorage.removeItem('streamLink');
-            } catch (error) {
-                console.error('Error ending live stream:', error);
-            }
-        }
-    
-        async function startScreenShare() {
-            try {
-                screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                addTracksToPeerConnection(screenStream);
-                document.getElementById('videoStream').srcObject = screenStream;
-                socket.send('Started screen sharing');
-            } catch (error) {
-                console.error('Error starting screen share:', error);
-            }
-        }
-    
-        async function stopScreenShare() {
-            try {
-                screenStream.getTracks().forEach(track => track.stop());
-                document.getElementById('videoStream').srcObject = localStream;
-                socket.send('Stopped screen sharing');
-            } catch (error) {
-                console.error('Error stopping screen share:', error);
-            }
-        }
-    
-        function toggleVideo() {
-            if (videoEnabled) {
-                localStream.getVideoTracks().forEach(track => track.enabled = false);
-                document.querySelector('.btn i.fa-video-slash').style.display = 'inline';
-                document.querySelector('.btn i.fa-video').style.display = 'none';
-            } else {
-                localStream.getVideoTracks().forEach(track => track.enabled = true);
-                document.querySelector('.btn i.fa-video-slash').style.display = 'none';
-                document.querySelector('.btn i.fa-video').style.display = 'inline';
-            }
-            videoEnabled = !videoEnabled;
-        }
-    
-        function copyStreamLink() {
-            const link = document.getElementById('streamLink').innerText;
-            navigator.clipboard.writeText(link).then(() => {
-                alert('Stream link copied to clipboard!');
+        function addTracksToPeerConnection(stream) {
+            stream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, stream);
             });
         }
     
+        function endLiveStream() {
+            localStream.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+            signalingSocket.close();
+        }
+
         function sendMessage() {
             const messageInput = document.getElementById('messageInput');
             const message = messageInput.value;
-            socket.send(message);
-            messageInput.value = '';
+            if (message) {
+                socket.send(message);
+                messageInput.value = ''; // Clear the input
+            }
         }
-    
-        function addTracksToPeerConnection(stream) {
-            stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+
+        function startScreenShare() {
+            navigator.mediaDevices.getDisplayMedia({ video: true })
+                .then(stream => {
+                    screenStream = stream;
+                    addTracksToPeerConnection(screenStream);
+                    stream.getTracks()[0].onended = stopScreenShare; // Stop screen share when ended
+                })
+                .catch(error => console.error('Error sharing screen:', error));
         }
-    
-        setupWebSockets();
+
+        function stopScreenShare() {
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+            }
+        }
+
+        function toggleVideo() {
+            videoEnabled = !videoEnabled;
+            localStream.getVideoTracks().forEach(track => track.enabled = videoEnabled);
+        }
+
+        function copyStreamLink() {
+            const streamLink = localStorage.getItem('streamLink');
+            navigator.clipboard.writeText(streamLink).then(() => {
+                alert('Stream link copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy stream link: ', err);
+            });
+        }
+
+        // Initialize the WebSockets when the page loads
+        window.onload = setupWebSockets;
     </script>
+
 </body>
 </html>

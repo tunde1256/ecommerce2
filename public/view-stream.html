@@ -123,7 +123,8 @@
         const peerConnection = new RTCPeerConnection();
 
         // Simulating a user name (in a real app, it would be fetched from user data)
-        const userName = "John Doe";
+        const urlParams = new URLSearchParams(window.location.search);
+        const userName = urlParams.get('username') || "Guest"; // Get username from URL or set as 'Guest'
 
         // WebRTC code
         peerConnection.ontrack = (event) => {
