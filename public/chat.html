@@ -253,7 +253,7 @@
                 video.srcObject = localStream;
                 addTracksToPeerConnection(localStream);
 
-                // Generate the stream link
+                // Generate the stream link using your deployment URL
                 const streamId = new Date().getTime();
                 const streamLink = `https://chat-and-live-stream.onrender.com/join-stream.html?streamId=${streamId}&token=${token}`;
                 
@@ -261,13 +261,10 @@
                 localStorage.setItem('streamLink', streamLink);
 
                 // Display the link in the UI
-                document.getElementById('streamLink').innerHTML = `Share this link to join the stream: <a href="${streamLink}" target="_blank">${streamLink}</a>`;
-
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                signalingSocket.send(JSON.stringify({ offer }));
-
-                setupWebSockets();
+                document.getElementById('streamLink').innerHTML = `Your stream link: <a href="${streamLink}" target="_blank">${streamLink}</a>`;
+                
+                // Start signaling
+                signalingSocket.send(JSON.stringify({ offer: await peerConnection.createOffer() }));
             } catch (error) {
                 console.error('Error starting live stream:', error);
             }
@@ -278,32 +275,33 @@
                 peerConnection.addTrack(track, stream);
             });
         }
-    
-        function endLiveStream() {
-            localStream.getTracks().forEach(track => track.stop());
-            video.srcObject = null;
-            signalingSocket.close();
-        }
 
         function sendMessage() {
             const messageInput = document.getElementById('messageInput');
-            const message = messageInput.value;
+            const message = messageInput.value.trim();
             if (message) {
                 socket.send(message);
-                messageInput.value = ''; // Clear the input
+                messageInput.value = '';
             }
         }
-
-        function startScreenShare() {
-            navigator.mediaDevices.getDisplayMedia({ video: true })
-                .then(stream => {
-                    screenStream = stream;
-                    addTracksToPeerConnection(screenStream);
-                    stream.getTracks()[0].onended = stopScreenShare; // Stop screen share when ended
-                })
-                .catch(error => console.error('Error sharing screen:', error));
+    
+        async function endLiveStream() {
+            // Stop all media tracks
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            signalingSocket.close();
+            socket.close();
         }
-
+    
+        function startScreenShare() {
+            navigator.mediaDevices.getDisplayMedia({ video: true }).then(stream => {
+                screenStream = stream;
+                addTracksToPeerConnection(screenStream);
+                screenStream.getTracks()[0].onended = stopScreenShare; // Stop sharing when the user ends it
+            });
+        }
+    
         function stopScreenShare() {
             if (screenStream) {
                 screenStream.getTracks().forEach(track => track.stop());
@@ -313,21 +311,17 @@
 
         function toggleVideo() {
             videoEnabled = !videoEnabled;
-            localStream.getVideoTracks().forEach(track => track.enabled = videoEnabled);
+            localStream.getVideoTracks()[0].enabled = videoEnabled;
         }
 
         function copyStreamLink() {
-            const streamLink = localStorage.getItem('streamLink');
-            navigator.clipboard.writeText(streamLink).then(() => {
+            const link = document.getElementById('streamLink').innerText;
+            navigator.clipboard.writeText(link).then(() => {
                 alert('Stream link copied to clipboard!');
-            }).catch(err => {
-                console.error('Failed to copy stream link: ', err);
             });
         }
 
-        // Initialize the WebSockets when the page loads
-        window.onload = setupWebSockets;
+        setupWebSockets();
     </script>
-
 </body>
 </html>
